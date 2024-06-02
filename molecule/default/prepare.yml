@@ -1,0 +1,199 @@
+---
+- name: Prepare DC
+  hosts:
+    - dc
+  tasks:
+    - name: Creat domain, if needed
+      when:
+        - not (ansible_windows_domain_role | regex_search('(domain controller)'))
+      block:
+        - name: Set DNS server on all interfaces to public DNS temporarily
+          ansible.windows.win_dns_client:
+            adapter_names: '*'
+            dns_servers:
+              - '8.8.8.8'
+              - '4.2.2.2'
+
+        - name: Install Active Directory Domain Services
+          ansible.windows.win_feature:
+            name:
+              - AD-Domain-Services
+            include_management_tools: true
+            include_sub_features: true
+            state: present
+
+        - name: Install new AD domain for test.local
+          microsoft.ad.domain:
+            dns_domain_name: test.local
+            install_dns: true
+            safe_mode_password: vagrantPassword1234!
+          register: _create_domain
+
+        - name: Reboot, if needed
+          when:
+            - _create_domain.reboot_required
+          ansible.windows.win_reboot:
+
+        - name: Disable default GPOs
+          ansible.windows.win_powershell:
+            script: |
+              Set-GPLink -Name 'Default Domain Controllers Policy' -Target 'OU=Domain Controllers,DC=test,DC=local' -LinkEnabled No -Enforced No
+              Set-GPLink -Name 'Default Domain Policy' -Target 'DC=test,DC=local' -LinkEnabled No -Enforced No
+
+    - name: Set DNS server on all interfaces to localhost
+      ansible.windows.win_dns_client:
+        adapter_names: '*'
+        dns_servers:
+          - '127.0.0.1'
+
+    - name: Ensure vagrant domain user is present
+      microsoft.ad.user:
+        name: vagrant
+        groups:
+          add:
+            - Domain Admins
+            - Enterprise Admins
+            - Schema Admins
+            - Administrators
+        state: present
+
+    - name: Set network to Private
+      ansible.windows.win_powershell:
+        script: |
+          $Ansible.Changed = $false
+
+          $profile = Get-NetConnectionProfile
+
+          if ($profile.NetworkCategory -eq 'Public')
+          {
+            $Ansible.Changed = $true
+            $profile | Set-NetConnectionProfile -NetworkCategory Private
+          }
+
+- name: Prepare member server
+  hosts:
+    - windows_domain_members
+  gather_facts: false
+  tasks:
+    - name: Run early commands as local Vagrant user
+      vars:
+        ansible_user: vagrant
+      block:
+        - name: Gathering Facts
+          ansible.builtin.setup:
+
+        - name: Set DNS to DC address
+          ansible.windows.win_dns_client:
+            adapter_names: '*'
+            dns_servers:
+              - "{{ hostvars['dc'].ansible_host }}"
+
+        - name: Set network to Private
+          ansible.windows.win_powershell:
+            script: |
+              $Ansible.Changed = $false
+
+              $profile = Get-NetConnectionProfile
+
+              if ($profile.NetworkCategory -eq 'Public')
+              {
+                $Ansible.Changed = $true
+                $profile | Set-NetConnectionProfile -NetworkCategory Private
+              }
+
+        - name: Join domain
+          microsoft.ad.membership:
+            dns_domain_name: test.local
+            domain_admin_password: vagrant
+            domain_admin_user: vagrant@test.local
+            hostname: ms
+            state: domain
+          register: _domain_join
+
+        - name: Reboot machine
+          when:
+            - _domain_join.reboot_required
+          ansible.windows.win_reboot:
+
+        - name: Create profile for domain user
+          community.windows.win_user_profile:
+            username: vagrant@test.local
+            state: present
+          register: _create_profile
+
+        - name: Create .ssh directory in domain user profile
+          ansible.windows.win_file:
+            path: "{{ _create_profile.path }}\\.ssh"
+            state: directory
+
+        - name: Copy ssh authorized_keys to new profile
+          ansible.windows.win_copy:
+            src: C:\Users\vagrant\.ssh\authorized_keys
+            dest: "{{ _create_profile.path }}\\.ssh\\authorized_keys"
+            remote_src: true
+
+        - name: Ensure authorized_keys file does not inherit ACE
+          ansible.windows.win_acl_inheritance:
+            path: "{{ _create_profile.path }}\\.ssh\\authorized_keys"
+            state: absent
+            reorganize: true
+
+        - name: Ensure Administrators group does not have access to authorized_keys file
+          ansible.windows.win_acl:
+            path: "{{ _create_profile.path }}\\.ssh\\authorized_keys"
+            user: Administrators
+            rights: FullControl
+            type: allow
+            state: absent
+
+        - name: Ensure SYSTEM user has FullControl access to authorized_keys file
+          ansible.windows.win_acl:
+            path: "{{ _create_profile.path }}\\.ssh\\authorized_keys"
+            user: SYSTEM
+            rights: FullControl
+            type: allow
+            state: present
+
+        - name: Ensure domain user has FullControl access to authorized_keys file
+          ansible.windows.win_acl:
+            path: "{{ _create_profile.path }}\\.ssh\\authorized_keys"
+            user: vagrant@test.local
+            rights: FullControl
+            type: allow
+            state: present
+
+        - name: Register DNS
+          delegate_to: dc
+          community.windows.win_dns_record:
+            name: "{{ inventory_hostname }}"
+            type: A
+            zone: test.local
+            value: "{{ ansible_host }}"
+            state: present
+
+- name: Prepare Windows standalone
+  hosts:
+    - windows_standalone
+  gather_facts: false
+  tasks:
+    - name: Set network to Private
+      ansible.windows.win_powershell:
+        script: |
+          $Ansible.Changed = $false
+
+          $profile = Get-NetConnectionProfile
+
+          if ($profile.NetworkCategory -eq 'Public')
+          {
+            $Ansible.Changed = $true
+            $profile | Set-NetConnectionProfile -NetworkCategory Private
+          }
+    
+    - name: Register DNS
+      delegate_to: dc
+      community.windows.win_dns_record:
+        name: "{{ inventory_hostname }}"
+        type: A
+        zone: test.local
+        value: "{{ ansible_host }}"
+        state: present

@@ -1,0 +1,6 @@
+---
+- name: Converge
+  hosts:
+    - subjects
+  roles:
+    - role: pag.windows_2019_cis
