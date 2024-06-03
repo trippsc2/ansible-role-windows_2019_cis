@@ -23,7 +23,7 @@ argument_specs:
           - 2
           - 3
         required: false
-        default: 1
+        default: 3
       w2019cis_is_template:
         description: 
           - Whether to apply the CIS Benchmark as a template.
