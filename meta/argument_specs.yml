@@ -1,7 +1,7 @@
 ---
 argument_specs:
   main:
-    short_description: This role applies the CIS Benchmark hardening steps on Windows Server 2019 machines.
+    short_description: Windows Server 2019 CIS Benchmarks
     description:
       - This role applies the CIS Benchmark hardening steps on Windows Server 2019 machines.
     author:
