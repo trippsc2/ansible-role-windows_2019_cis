@@ -3,4 +3,4 @@
   hosts:
     - subjects
   roles:
-    - role: pag.windows_2019_cis
+    - role: trippsc2.windows_2019_cis
