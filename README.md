@@ -1,13 +1,13 @@
 <!-- BEGIN_ANSIBLE_DOCS -->
 
-# Ansible Role: trippsc2.windows_2019_cis
-This role applies the CIS Benchmark hardening steps on Windows Server 2019 machines.
+# Ansible Role: ansible-role-windows_2019_cis
+DEPRECATED: Use trippsc2.cis.windows2019 instead.
 
 ## Requirements
 
 | Platform | Versions |
 | -------- | -------- |
-| Windows | 2019 |
+| Windows | <ul><li>2019</li></ul> |
 
 ## Dependencies
 
@@ -20,7 +20,7 @@ This role applies the CIS Benchmark hardening steps on Windows Server 2019 machi
 |Option|Description|Type|Required|Choices|Default|
 |---|---|---|---|---|---|
 | w2019cis_skip_reboot | Whether to skip rebooting the machine. | bool | no |  | false |
-| w2019cis_level | The CIS Benchmark level to apply. Level 3 refers to Next Generation Windows Security (NGWS) benchmarks. | int | no | <ul><li>1</li><li>2</li><li>3</li></ul> | 1 |
+| w2019cis_level | The CIS Benchmark level to apply. Level 3 refers to Next Generation Windows Security (NGWS) benchmarks. | int | no | <ul><li>1</li><li>2</li><li>3</li></ul> | 3 |
 | w2019cis_is_template | Whether to apply the CIS Benchmark as a template. If true, only apply the benchmarks that apply to standalone, domain members, and domain controllers are applied. | bool | no |  | false |
 | w2019cis_rule_1_1_1_enabled | Whether to enable rule 1.1.1. | bool | no |  | true |
 | w2019cis_rule_1_1_2_enabled | Whether to enable rule 1.1.2. | bool | no |  | true |
